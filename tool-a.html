@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html class="light" lang="ko"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>BidGen AI - 도구 A: 원가설계서 표준검증</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Hanken+Grotesk:wght@600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="assets/css/style.css" rel="stylesheet"/>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: { extend: {
+                colors: {
+                    "manual-input": "#F59E0B", "on-error": "#ffffff", "on-secondary": "#ffffff",
+                    "surface": "#f7f9fb", "surface-container-high": "#e6e8ea", "surface-container-highest": "#e0e3e5",
+                    "inverse-surface": "#2d3133", "inverse-on-surface": "#eff1f3", "status-error": "#EF4444",
+                    "auto-processed": "#10B981", "on-background": "#191c1e", "ai-recommend": "#7C4DFF",
+                    "legal-divider": "#E2E8F0", "secondary": "#006876", "on-primary-container": "#799dd6",
+                    "tertiary-container": "#193743", "outline-variant": "#c3c6d1", "background": "#f7f9fb",
+                    "error-container": "#ffdad6", "primary": "#001e40", "on-error-container": "#93000a",
+                    "surface-container-lowest": "#ffffff", "outline": "#737780", "on-surface-variant": "#43474f",
+                    "surface-bright": "#f7f9fb", "surface-container-low": "#f2f4f6", "secondary-container": "#58e6ff",
+                    "tertiary": "#00222d", "surface-dim": "#d8dadc", "on-secondary-container": "#006573",
+                    "primary-container": "#003366", "secondary-fixed": "#a1efff", "secondary-fixed-dim": "#44d8f1",
+                    "on-secondary-fixed-variant": "#004e59", "on-surface": "#191c1e", "surface-container": "#eceef0",
+                    "error": "#ba1a1a", "on-primary": "#ffffff", "surface-variant": "#e0e3e5", "on-tertiary": "#ffffff"
+                },
+                borderRadius: { DEFAULT: "0.125rem", lg: "0.25rem", xl: "0.5rem", full: "0.75rem" },
+                spacing: { "column-gap": "24px", gutter: "16px", base: "4px", "margin-desktop": "32px", "margin-mobile": "16px", "form-stack": "20px" },
+                fontFamily: { "body-md": ["Inter"], "headline-lg": ["Hanken Grotesk"], "label-mono": ["JetBrains Mono"], "headline-sm": ["Hanken Grotesk"], "headline-md": ["Hanken Grotesk"] },
+                fontSize: {
+                    "body-sm": ["12px", {lineHeight:"18px", fontWeight:"400"}], "body-lg": ["16px", {lineHeight:"24px", fontWeight:"400"}],
+                    "body-md": ["14px", {lineHeight:"20px", fontWeight:"400"}], "headline-lg": ["32px", {lineHeight:"40px", letterSpacing:"-0.02em", fontWeight:"700"}],
+                    "label-mono": ["12px", {lineHeight:"16px", letterSpacing:"0.05em", fontWeight:"500"}], "headline-sm": ["20px", {lineHeight:"28px", fontWeight:"600"}],
+                    "headline-md": ["24px", {lineHeight:"32px", fontWeight:"600"}], "status-tag": ["11px", {lineHeight:"12px", fontWeight:"700"}]
+                }
+            } }
+        };
+    </script>
+</head>
+<body class="bg-surface text-on-surface font-body-md">
+<div class="flex h-screen w-full overflow-hidden">
+  <!-- Sidebar -->
+  <aside class="hidden md:flex flex-col h-full py-6 px-4 gap-4 bg-surface-container-low border-r border-legal-divider w-64 shrink-0">
+    <div class="flex items-center gap-3 px-2 mb-4">
+      <div class="w-10 h-10 rounded-lg bg-primary flex items-center justify-center text-white"><span class="material-symbols-outlined" style="font-variation-settings:'FILL' 1;">analytics</span></div>
+      <div><h1 class="font-headline-sm text-headline-sm font-bold text-primary">BidGen AI</h1><p class="text-[10px] font-label-mono text-outline uppercase tracking-widest">v1.0 MVP</p></div>
+    </div>
+    <nav class="flex-1 space-y-1">
+      <a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container-high transition-all rounded-lg group" href="index.html"><span class="material-symbols-outlined group-hover:text-primary">dashboard</span><span class="font-label-mono">대시보드</span></a>
+      <a class="flex items-center gap-3 px-3 py-2 bg-secondary-container text-on-secondary-container rounded-lg font-bold" href="tool-a.html"><span class="material-symbols-outlined" style="font-variation-settings:'FILL' 1;">rule</span><span class="font-label-mono">도구A 표준검증</span></a>
+      <a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container-high transition-all rounded-lg group" href="tool-b.html"><span class="material-symbols-outlined group-hover:text-primary">edit_note</span><span class="font-label-mono">도구B 공고문작성</span></a>
+    </nav>
+    <div class="pt-4 border-t border-legal-divider space-y-1">
+      <div class="px-3 py-2 text-[10px] text-outline font-label-mono leading-relaxed">
+        확정된 원가설계서는 도구B로 단방향 전달됩니다. 확정 후 이 화면에서 재수정할 수 없습니다.
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="flex-1 flex flex-col min-w-0 bg-background relative overflow-hidden">
+    <header class="flex justify-between items-center w-full px-6 md:px-margin-desktop h-16 sticky top-0 z-40 bg-surface border-b border-legal-divider">
+      <div class="flex items-center gap-6 overflow-x-auto">
+        <h2 class="font-headline-md text-headline-md font-bold text-primary whitespace-nowrap">도구 A: 원가설계서 검증</h2>
+        <div class="flex items-center gap-2" id="stepper"></div>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-[11px] font-label-mono text-outline uppercase">기준정보 v.</span>
+        <span class="text-[11px] font-bold text-primary" id="rate-version-badge"></span>
+      </div>
+    </header>
+
+    <div class="flex-1 overflow-y-auto p-6 md:p-margin-desktop space-y-6" id="step-container"></div>
+
+    <!-- Bottom Summary Bar -->
+    <footer class="hidden md:flex h-24 bg-white border-t border-legal-divider items-center px-6 md:px-margin-desktop gap-8 shadow-[0_-4px_24px_rgba(0,0,0,0.05)]" id="summary-bar"></footer>
+  </main>
+</div>
+
+<script src="assets/js/data.js"></script>
+<script src="assets/js/common.js"></script>
+<script src="assets/js/export-utils.js"></script>
+<script src="assets/js/tool-a.js"></script>
+</body></html>

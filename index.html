@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html class="light" lang="ko"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>BidGen AI - 대시보드</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Hanken+Grotesk:wght@600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="assets/css/style.css" rel="stylesheet"/>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: { extend: {
+                colors: {
+                    "manual-input": "#F59E0B", "surface": "#f7f9fb", "surface-container-high": "#e6e8ea",
+                    "surface-container-highest": "#e0e3e5", "status-error": "#EF4444", "auto-processed": "#10B981",
+                    "on-background": "#191c1e", "ai-recommend": "#7C4DFF", "legal-divider": "#E2E8F0",
+                    "secondary": "#006876", "outline-variant": "#c3c6d1", "background": "#f7f9fb",
+                    "primary": "#001e40", "surface-container-lowest": "#ffffff", "outline": "#737780",
+                    "on-surface-variant": "#43474f", "surface-container-low": "#f2f4f6", "secondary-container": "#58e6ff",
+                    "on-secondary-container": "#006573", "primary-container": "#003366", "on-surface": "#191c1e",
+                    "surface-container": "#eceef0", "error": "#ba1a1a", "on-primary": "#ffffff"
+                },
+                borderRadius: { DEFAULT: "0.125rem", lg: "0.25rem", xl: "0.5rem", full: "0.75rem" },
+                fontFamily: { "body-md": ["Inter"], "headline-lg": ["Hanken Grotesk"], "label-mono": ["JetBrains Mono"], "headline-sm": ["Hanken Grotesk"], "headline-md": ["Hanken Grotesk"] }
+            } }
+        };
+    </script>
+</head>
+<body class="bg-surface text-on-surface font-body-md">
+<div class="flex h-screen w-full overflow-hidden">
+  <aside class="hidden md:flex flex-col h-full py-6 px-4 gap-4 bg-surface-container-low border-r border-legal-divider w-64 shrink-0">
+    <div class="flex items-center gap-3 px-2 mb-4">
+      <div class="w-10 h-10 rounded-lg bg-primary flex items-center justify-center text-white"><span class="material-symbols-outlined" style="font-variation-settings:'FILL' 1;">analytics</span></div>
+      <div><h1 class="font-headline-sm text-headline-sm font-bold text-primary">BidGen AI</h1><p class="text-[10px] font-label-mono text-outline uppercase tracking-widest">v1.0 MVP</p></div>
+    </div>
+    <nav class="flex-1 space-y-1">
+      <a class="flex items-center gap-3 px-3 py-2 bg-secondary-container text-on-secondary-container rounded-lg font-bold" href="index.html"><span class="material-symbols-outlined" style="font-variation-settings:'FILL' 1;">dashboard</span><span class="font-label-mono">대시보드</span></a>
+      <a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container-high transition-all rounded-lg group" href="tool-a.html"><span class="material-symbols-outlined group-hover:text-primary">rule</span><span class="font-label-mono">도구A 표준검증</span></a>
+      <a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container-high transition-all rounded-lg group" href="tool-b.html"><span class="material-symbols-outlined group-hover:text-primary">edit_note</span><span class="font-label-mono">도구B 공고문작성</span></a>
+    </nav>
+  </aside>
+
+  <main class="flex-1 flex flex-col min-w-0 bg-background overflow-y-auto">
+    <header class="flex justify-between items-center w-full px-6 md:px-margin-desktop h-16 sticky top-0 z-40 bg-surface border-b border-legal-divider">
+      <h2 class="font-headline-md text-headline-md font-bold text-primary">대시보드</h2>
+    </header>
+    <div class="p-6 md:p-margin-desktop space-y-8">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <a href="tool-a.html" class="block bg-white border border-legal-divider rounded-xl p-6 space-y-3 hover:shadow-md hover:border-primary transition-all">
+          <div class="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center text-primary"><span class="material-symbols-outlined text-2xl">rule</span></div>
+          <h3 class="font-headline-sm text-headline-sm font-bold">도구 A — 원가설계서 표준검증</h3>
+          <p class="text-sm text-outline">파일 업로드, 견적서 대조, 제비율 자동 적용, 법령준수 금액편성 검증을 통해 원가계산서를 표준화·검증합니다.</p>
+          <span class="text-sm font-bold text-primary flex items-center gap-1">시작하기<span class="material-symbols-outlined text-sm">arrow_forward</span></span>
+        </a>
+        <a href="tool-b.html" class="block bg-white border border-legal-divider rounded-xl p-6 space-y-3 hover:shadow-md hover:border-primary transition-all">
+          <div class="w-12 h-12 rounded-lg bg-secondary/10 flex items-center justify-center text-secondary"><span class="material-symbols-outlined text-2xl">edit_note</span></div>
+          <h3 class="font-headline-sm text-headline-sm font-bold">도구 B — 입찰공고문 자동생성</h3>
+          <p class="text-sm text-outline">도구A의 확정 원가설계서를 단방향으로 불러와 일정·조건을 설정하고, 엑셀/PDF/한글(HWP) 공고문을 생성합니다.</p>
+          <span class="text-sm font-bold text-primary flex items-center gap-1">시작하기<span class="material-symbols-outlined text-sm">arrow_forward</span></span>
+        </a>
+      </div>
+
+      <div class="bg-white border border-legal-divider rounded-xl p-6">
+        <h3 class="font-headline-sm text-headline-sm font-bold mb-4">확정된 원가설계서 목록</h3>
+        <div id="sheet-list" class="space-y-2"></div>
+      </div>
+    </div>
+  </main>
+</div>
+<script src="assets/js/data.js"></script>
+<script src="assets/js/common.js"></script>
+<script>
+  const list = loadConfirmedSheets();
+  const box = document.getElementById('sheet-list');
+  box.innerHTML = list.length === 0
+    ? `<p class="text-sm text-outline">아직 확정된 원가설계서가 없습니다.</p>`
+    : list.map((s) => `
+      <div class="flex items-center justify-between border border-legal-divider rounded-lg p-3">
+        <div>
+          <div class="font-bold text-sm">${escapeHtml(s.projectName)} <span class="text-[10px] text-outline font-normal">(${s.projectType === 'purchase' ? '구매' : '유지보수'})</span></div>
+          <div class="text-[11px] text-outline">확정일시: ${escapeHtml(s.confirmedAt)} · 총계: ${won(s.totals.total)}</div>
+        </div>
+        <a href="tool-b.html" class="text-xs font-bold text-primary">공고문 작성 →</a>
+      </div>`).join('');
+</script>
+</body></html>
