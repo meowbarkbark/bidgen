@@ -5,9 +5,19 @@ import { DetailScreen } from './screens/DetailScreen';
 import { ProgressScreen } from './screens/ProgressScreen';
 import { RecognitionScreen } from './screens/RecognitionScreen';
 import { UploadScreen } from './screens/UploadScreen';
-import type { FileMeta, ProcurementType, RecognitionSummary, ResultFilters, WorkbookIR } from './types';
-import { filterResults, getAdjacentResult, sortResultsByPriority } from './utils/results';
+import type {
+  FileMeta,
+  ProcurementType,
+  RecognitionSummary,
+  ReferenceRate,
+  ResultFilters,
+  ValidationMode,
+  ValidationResult,
+  WorkbookIR,
+} from './types';
+import { filterResults, getAdjacentResult, getReviewResults, sortResultsByPriority } from './utils/results';
 import { irSheetToRecognition } from './utils/excel';
+import { buildReferenceRows, parseRate, runValidation } from './utils/validation';
 
 type Step = 'upload' | 'recognition' | 'progress' | 'dashboard' | 'detail';
 
@@ -33,21 +43,31 @@ export default function App({ initialStep = 'upload' }: AppProps) {
   const [excelFile, setExcelFile] = useState<FileMeta | null>(initialStep === 'upload' ? null : fallbackExcel);
   const [workbookIR, setWorkbookIR] = useState<WorkbookIR | null>(null);
   const [pdfFiles, setPdfFiles] = useState<FileMeta[]>(initialStep === 'upload' ? [] : fallbackPdfs);
-  const [selectedResultId, setSelectedResultId] = useState('vr-001');
+  const [mode, setMode] = useState<ValidationMode>('ARITHMETIC_ONLY');
+  const [rateInputs, setRateInputs] = useState<Record<string, string>>({});
+  const [results, setResults] = useState<ValidationResult[]>([]);
+  const [selectedResultId, setSelectedResultId] = useState('');
   const [filters, setFilters] = useState<ResultFilters>({
     status: 'ALL',
     validationType: 'ALL',
     sheetName: 'ALL',
   });
 
-  const orderedResults = useMemo(() => sortResultsByPriority(sampleResults), []);
+  // 실제 결과가 있으면 그것을, 없으면(딥링크 데모) 샘플을 사용
+  const orderedResults = useMemo(
+    () => (results.length ? sortResultsByPriority(results) : sortResultsByPriority(sampleResults)),
+    [results],
+  );
   const visibleResults = useMemo(() => filterResults(orderedResults, filters), [filters, orderedResults]);
-  const selectedResult = orderedResults.find((result) => result.resultId === selectedResultId) ?? visibleResults[0] ?? orderedResults[0];
+  const selectedResult =
+    orderedResults.find((result) => result.resultId === selectedResultId) ?? visibleResults[0] ?? orderedResults[0];
 
   const summary = useMemo<RecognitionSummary>(() => {
     if (!workbookIR || workbookIR.sheets.length === 0) return recognitionSummary;
     return { ...recognitionSummary, sheets: workbookIR.sheets.map(irSheetToRecognition) };
   }, [workbookIR]);
+
+  const referenceRows = useMemo<ReferenceRate[]>(() => (workbookIR ? buildReferenceRows(workbookIR) : []), [workbookIR]);
 
   const steps = useMemo(() => {
     if (!workbookIR) return progressSteps;
@@ -59,6 +79,22 @@ export default function App({ initialStep = 'upload' }: AppProps) {
   function handleExcelChange(meta: FileMeta, ir: WorkbookIR | null) {
     setExcelFile(meta);
     setWorkbookIR(ir);
+    setRateInputs({});
+  }
+
+  function handleRun() {
+    if (workbookIR) {
+      const referenceRates: Record<string, ReferenceRate> = {};
+      for (const row of referenceRows) {
+        const raw = rateInputs[row.canonicalName];
+        const rate = raw != null && raw.trim() !== '' ? parseRate(raw, null) : row.rate;
+        referenceRates[row.canonicalName] = { canonicalName: row.canonicalName, rate };
+      }
+      const real = sortResultsByPriority(runValidation(workbookIR, { mode, referenceRates }));
+      setResults(real);
+      setSelectedResultId(getReviewResults(real)[0]?.resultId ?? real[0]?.resultId ?? '');
+    }
+    setStep('progress');
   }
 
   function applyFilters(nextFilters: ResultFilters) {
@@ -87,9 +123,14 @@ export default function App({ initialStep = 'upload' }: AppProps) {
     return (
       <RecognitionScreen
         excelFile={excelFile ?? fallbackExcel}
+        mode={mode}
         onBack={() => setStep('upload')}
-        onRun={() => setStep('progress')}
+        onModeChange={setMode}
+        onRateInput={(name, value) => setRateInputs((prev) => ({ ...prev, [name]: value }))}
+        onRun={handleRun}
         pdfFiles={pdfFiles}
+        rateInputs={rateInputs}
+        referenceRows={referenceRows}
         summary={summary}
         workbookIR={workbookIR}
       />

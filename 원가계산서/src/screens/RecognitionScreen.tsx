@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ArrowLeft, ArrowRight, CheckCircle2, FileSearch, FileText, TriangleAlert } from '../components/icons';
-import type { FileMeta, RecognitionSummary, WorkbookIR } from '../types';
+import type { FileMeta, RecognitionSummary, ReferenceRate, ValidationMode, WorkbookIR } from '../types';
 import { Button, Panel } from '../components/ui';
 import { downloadJson } from '../utils/download';
 
@@ -9,11 +9,33 @@ interface RecognitionScreenProps {
   pdfFiles: FileMeta[];
   summary: RecognitionSummary;
   workbookIR: WorkbookIR | null;
+  mode: ValidationMode;
+  onModeChange: (mode: ValidationMode) => void;
+  referenceRows: ReferenceRate[];
+  rateInputs: Record<string, string>;
+  onRateInput: (canonicalName: string, value: string) => void;
   onBack: () => void;
   onRun: () => void;
 }
 
-export function RecognitionScreen({ excelFile, pdfFiles, summary, workbookIR, onBack, onRun }: RecognitionScreenProps) {
+const MODE_OPTIONS: Array<{ value: ValidationMode; label: string; description: string }> = [
+  { value: 'ARITHMETIC_ONLY', label: '산술/합계/수식 검증만', description: '기준자료 없이 파일 내 값만으로 검증' },
+  { value: 'ARITHMETIC_AND_RATE', label: '산술 + 요율 검증', description: '아래 기준요율을 입력해 제비율·보험료까지 검증' },
+];
+
+export function RecognitionScreen({
+  excelFile,
+  pdfFiles,
+  summary,
+  workbookIR,
+  mode,
+  onModeChange,
+  referenceRows,
+  rateInputs,
+  onRateInput,
+  onBack,
+  onRun,
+}: RecognitionScreenProps) {
   const [showJson, setShowJson] = useState(false);
 
   return (
@@ -79,6 +101,60 @@ export function RecognitionScreen({ excelFile, pdfFiles, summary, workbookIR, on
               </Button>
             </div>
             {showJson ? <pre className="json-view">{JSON.stringify(workbookIR, null, 2)}</pre> : null}
+          </Panel>
+        ) : null}
+
+        <Panel>
+          <div className="section-heading">
+            <span>검증 모드</span>
+            <p>기준요율 없이 산술만 검증하거나, 요율까지 함께 검증할 수 있습니다.</p>
+          </div>
+          <div className="procurement-grid">
+            {MODE_OPTIONS.map((option) => (
+              <button
+                className={`procurement-option ${mode === option.value ? 'is-selected' : ''}`}
+                key={option.value}
+                onClick={() => onModeChange(option.value)}
+                type="button"
+              >
+                <strong>{option.label}</strong>
+                <span>{option.description}</span>
+              </button>
+            ))}
+          </div>
+        </Panel>
+
+        {mode === 'ARITHMETIC_AND_RATE' ? (
+          <Panel>
+            <div className="section-heading">
+              <span>기준요율 입력</span>
+              <p>파일에서 탐지한 제비율·보험료 항목입니다. 기준요율(%)을 입력하면 적용요율·금액을 검증합니다.</p>
+            </div>
+            {workbookIR && referenceRows.length > 0 ? (
+              <div className="rate-table">
+                {referenceRows.map((row) => (
+                  <label className="rate-row" key={row.canonicalName}>
+                    <span>{row.canonicalName}</span>
+                    <span className="rate-input">
+                      <input
+                        aria-label={`${row.canonicalName} 기준요율(%)`}
+                        inputMode="decimal"
+                        onChange={(event) => onRateInput(row.canonicalName, event.target.value)}
+                        placeholder={row.rate != null ? (row.rate * 100).toString() : '예: 3.56'}
+                        type="text"
+                        value={rateInputs[row.canonicalName] ?? (row.rate != null ? (row.rate * 100).toString() : '')}
+                      />
+                      <em>%</em>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <div className="review-note">
+                <TriangleAlert size={18} />
+                <span>{workbookIR ? '탐지된 제비율·보험료 항목이 없습니다. 산술 검증만 진행됩니다.' : 'Excel을 업로드하면 기준요율을 입력할 수 있습니다.'}</span>
+              </div>
+            )}
           </Panel>
         ) : null}
 

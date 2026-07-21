@@ -911,3 +911,44 @@ blockquote {
   white-space: pre;
   tab-size: 2;
 }
+
+.rate-table {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.rate-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 160px;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #f7fafc;
+  border: 1px solid #dbe3ea;
+  border-radius: 8px;
+}
+
+.rate-row > span:first-child {
+  font-weight: 600;
+}
+
+.rate-input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rate-input input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #c4d0da;
+  border-radius: 7px;
+  font-size: 14px;
+  text-align: right;
+}
+
+.rate-input em {
+  font-style: normal;
+  color: #617080;
+}

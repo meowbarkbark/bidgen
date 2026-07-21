@@ -133,6 +133,38 @@ export interface WorkbookIR {
   totals: { sheetCount: number; cellCount: number; formulaCount: number; mergeCount: number };
 }
 
+// --- 검증 엔진 설정 ---
+
+export type ValidationMode = 'ARITHMETIC_ONLY' | 'ARITHMETIC_AND_RATE';
+
+export type RoundingMethod = 'ROUND_WON' | 'FLOOR_WON' | 'FLOOR_TEN' | 'NONE';
+
+export interface ReferenceRate {
+  canonicalName: string;
+  rate: number | null; // 분수(0.032). null = 미입력
+  roundingMethod?: RoundingMethod;
+}
+
+export interface ValidationConfig {
+  mode: ValidationMode;
+  referenceRates: Record<string, ReferenceRate>; // canonicalName 키
+  maxCellsScanned?: number; // 기본 20000
+  defaultRounding?: RoundingMethod; // 기본 ROUND_WON
+}
+
+export interface DetectedItem {
+  canonicalName: string;
+  originalLabel: string;
+  category: string;
+  sheetName: string;
+  labelCell: string;
+  amountCell: string | null;
+  rateCell: string | null;
+  amountValue: number | null;
+  rateValue: number | null; // 분수
+  requiresReference: boolean;
+}
+
 export interface ResultFilters {
   status: ValidationStatus | 'ALL';
   validationType: ValidationType | 'ALL';
