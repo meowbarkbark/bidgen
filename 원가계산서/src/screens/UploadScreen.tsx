@@ -1,6 +1,7 @@
 import { FileSpreadsheet, FileText, Play, ShieldCheck } from '../components/icons';
 import type { FileMeta, ProcurementType } from '../types';
 import { Button, Panel, UploadPanel } from '../components/ui';
+import { parseWorkbook, type ExcelInfo } from '../utils/excel';
 
 const procurementOptions: Array<{ value: ProcurementType; label: string; description: string }> = [
   { value: 'CONSTRUCTION', label: '공사', description: '요율, 노임단가, 표준품셈까지 상세 검증' },
@@ -13,7 +14,7 @@ interface UploadScreenProps {
   excelFile: FileMeta | null;
   pdfFiles: FileMeta[];
   onProcurementTypeChange: (type: ProcurementType) => void;
-  onExcelChange: (file: FileMeta) => void;
+  onExcelChange: (file: FileMeta, info: ExcelInfo | null) => void;
   onPdfChange: (files: FileMeta[]) => void;
   onStart: () => void;
 }
@@ -79,13 +80,20 @@ export function UploadScreen({
         <div className="upload-grid">
           <Panel>
             <UploadPanel
-              accept=".xlsx"
+              accept=".xlsx,.xls"
               action="Excel 파일 선택"
               description="원가계산서 Excel 파일을 여기에 놓거나 선택하세요."
               label="Excel 파일 선택"
-              onChange={(event) => {
+              onChange={async (event) => {
                 const file = event.currentTarget.files?.[0];
-                if (file) onExcelChange(fileToMeta(file, '18개 시트 · 912개 수식 · 시연 메타데이터'));
+                if (!file) return;
+                try {
+                  const info = await parseWorkbook(file);
+                  const detail = `${info.sheetCount}개 시트 · ${info.formulaCount.toLocaleString()}개 수식`;
+                  onExcelChange(fileToMeta(file, detail), info);
+                } catch {
+                  onExcelChange(fileToMeta(file, '시트 정보를 읽지 못했습니다'), null);
+                }
               }}
               title="검증할 원가계산서"
               meta={
