@@ -65,7 +65,7 @@ export function DetailScreen({ result, onBack, onNavigate }: DetailScreenProps) 
 
           <Panel>
             <div className="panel-heading-row">
-              <h2>PDF 판단근거</h2>
+              <h2>기준자료 판단근거</h2>
               <FileText size={18} />
             </div>
             <dl className="detail-list">

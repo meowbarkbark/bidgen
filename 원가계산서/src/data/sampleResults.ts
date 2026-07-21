@@ -79,7 +79,7 @@ export const progressSteps: ProgressStep[] = [
   { label: '수식과 참조 셀 연결', detail: '시트 간 참조와 원본 수식 보존' },
   { label: '수량 × 단가 및 금액 재계산', detail: '공통 산술 규칙 적용' },
   { label: '재료비·노무비·경비 합계 검증', detail: '소계와 총계 비교' },
-  { label: '제비율 적용값 비교', detail: 'PDF 기준요율과 Excel 요율 비교' },
+  { label: '제비율 적용값 비교', detail: '기준자료 요율과 Excel 요율 비교' },
   { label: '노임단가 비교', detail: '대표 직종명 매핑 확인' },
   { label: '표준품셈 적용 여부 확인', detail: '시연용 대표 항목 검토' },
   { label: '최종 추정가격 및 부가세 확인', detail: '공급가액, 부가세, 합계 검증' },
@@ -157,7 +157,7 @@ const primaryResults: ValidationResult[] = [
     },
     difference: '-369,000',
     summary: '기준요율과 다른 요율이 적용되었습니다.',
-    reason: '기준 PDF의 산재보험료 요율은 3.56%이나 Excel에는 3.20%가 적용되어 있습니다.',
+    reason: '기준자료의 산재보험료 요율은 3.56%이나 Excel에는 3.20%가 적용되어 있습니다.',
     evidence: {
       documentTitle: '2026년 건설공사 원가계산 제비율 적용기준.pdf',
       page: 4,
@@ -304,8 +304,8 @@ const generatedNeedsReview: ValidationResult[] = needsReviewNames.map((name, ind
   resultId: `vr-${String(index + 6).padStart(3, '0')}`,
   item: { canonicalName: name, originalName: name, category: index % 2 === 0 ? '조건' : '기준자료' },
   validationType: index % 2 === 0 ? 'CONDITION' : 'STANDARD',
-  summary: index % 2 === 0 ? '적용조건 확인이 필요합니다.' : 'PDF 근거 매핑 신뢰도가 보통입니다.',
-  reason: `${name} 항목은 자동 확정에 필요한 조건 일부가 사용자 입력 또는 PDF 구조에 의존합니다.`,
+  summary: index % 2 === 0 ? '적용조건 확인이 필요합니다.' : '기준자료 근거 매핑 신뢰도가 보통입니다.',
+  reason: `${name} 항목은 자동 확정에 필요한 조건 일부가 사용자 입력 또는 기준자료 구조에 의존합니다.`,
 }));
 
 const generatedWarnings: ValidationResult[] = warningNames.map((name, index) => ({

@@ -170,7 +170,7 @@ export function DashboardScreen({
             </dl>
 
             <div className="quote-box">
-              <strong>PDF 판단근거</strong>
+              <strong>기준자료 판단근거</strong>
               <p>{selectedResult.evidence.quote}</p>
               <span>
                 {selectedResult.evidence.documentTitle} · {selectedResult.evidence.page}페이지 · 신뢰도{' '}

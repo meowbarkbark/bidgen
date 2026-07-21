@@ -54,7 +54,7 @@ export function RecognitionScreen({ excelFile, pdfFiles, summary, onBack, onRun 
 
         <Panel>
           <div className="section-heading">
-            <span>PDF 기준자료 인식</span>
+            <span>기준자료 인식</span>
             <p>추출된 기준 종류와 확인 필요 항목입니다.</p>
           </div>
           <div className="criteria-grid">

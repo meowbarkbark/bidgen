@@ -51,7 +51,7 @@ export function UploadScreen({
         <header className="topbar">
           <div>
             <h1>원가계산서 자동검증</h1>
-            <p>Excel 계산 구조와 PDF 기준근거를 연결해 검증결과를 확인합니다.</p>
+            <p>Excel 계산 구조와 기준자료 근거를 연결해 검증결과를 확인합니다.</p>
           </div>
           <Button variant="ghost">도움말</Button>
         </header>
