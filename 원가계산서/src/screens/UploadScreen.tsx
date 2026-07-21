@@ -100,14 +100,21 @@ export function UploadScreen({
 
           <Panel>
             <UploadPanel
-              accept=".pdf"
-              action="PDF 파일 추가"
-              description="제비율표, 노임단가표, 표준품셈 등 기준자료 PDF를 등록하세요."
-              label="PDF 파일 추가"
+              accept=".pdf,.xlsx,.xls"
+              action="PDF·Excel 파일 추가"
+              description="제비율표, 노임단가표, 표준품셈 등 기준자료(PDF·Excel)를 등록하세요."
+              label="PDF·Excel 파일 추가"
               multiple
               onChange={(event) => {
                 const files = Array.from(event.currentTarget.files ?? []);
-                onPdfChange(files.map((file) => fileToMeta(file, '텍스트 추출 가능 · 시연 메타데이터')));
+                onPdfChange(
+                  files.map((file) =>
+                    fileToMeta(
+                      file,
+                      /\.xlsx?$/i.test(file.name) ? '시트 파싱 가능 · 시연 메타데이터' : '텍스트 추출 가능 · 시연 메타데이터',
+                    ),
+                  ),
+                );
               }}
               title="계산기준자료"
               meta={
@@ -115,7 +122,7 @@ export function UploadScreen({
                   <ul className="file-list">
                     {pdfFiles.map((file) => (
                       <li key={file.name}>
-                        <FileText size={16} /> {file.name}
+                        {/\.xlsx?$/i.test(file.name) ? <FileSpreadsheet size={16} /> : <FileText size={16} />} {file.name}
                       </li>
                     ))}
                   </ul>
@@ -126,7 +133,7 @@ export function UploadScreen({
         </div>
 
         <div className="footer-actions">
-          <p>PDF가 없어도 산술·수식·합계 검증은 진행할 수 있습니다.</p>
+          <p>기준자료가 없어도 산술·수식·합계 검증은 진행할 수 있습니다.</p>
           <Button disabled={!excelFile} icon={<Play size={16} />} onClick={onStart} variant="primary">
             자동검증 시작
           </Button>
