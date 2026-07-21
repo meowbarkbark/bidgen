@@ -86,6 +86,53 @@ export interface ProgressStep {
   detail: string;
 }
 
+// --- Workbook IR: 양식과 무관한 고정 JSON 스키마 (PRD §9.2 기반) ---
+
+export type SheetRole =
+  | 'COVER_SUMMARY'
+  | 'COST_SUMMARY'
+  | 'CONSTRUCTION_ITEMS'
+  | 'QUANTITY'
+  | 'UNIT_PRICE'
+  | 'PRICE_SURVEY'
+  | 'WAGE_RATE'
+  | 'RATE_STANDARD'
+  | 'OTHER';
+
+export type IRCellType = 'FORMULA' | 'NUMBER' | 'STRING' | 'BOOLEAN' | 'DATE' | 'ERROR' | 'BLANK';
+
+export interface IRCell {
+  address: string; // "F12"
+  dataType: IRCellType;
+  rawValue: string; // 수식이면 "=INT(F8*F10)", 아니면 리터럴
+  cachedValue: string | number | boolean | null; // 마지막 저장 계산값
+  displayValue: string; // 표시 텍스트
+  numberFormat: string | null;
+  mergedRange: string | null; // 병합 앵커 셀이면 "A1:B1", 아니면 null
+  hidden: boolean; // 행 또는 열 숨김
+  references: string[]; // 수식에서 추출 (로컬 + 시트간)
+}
+
+export interface IRSheet {
+  sheetName: string;
+  sheetRole: SheetRole;
+  rowCount: number;
+  columnCount: number;
+  cellCount: number;
+  formulaCount: number;
+  mergeCount: number;
+  cells: IRCell[];
+}
+
+export interface WorkbookIR {
+  schemaVersion: string; // "1.0"
+  fileName: string;
+  procurementType: ProcurementType;
+  generatedAt: string; // ISO
+  sheets: IRSheet[];
+  totals: { sheetCount: number; cellCount: number; formulaCount: number; mergeCount: number };
+}
+
 export interface ResultFilters {
   status: ValidationStatus | 'ALL';
   validationType: ValidationType | 'ALL';

@@ -888,3 +888,26 @@ blockquote {
     grid-template-columns: 1fr;
   }
 }
+
+.json-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.json-view {
+  margin: 14px 0 0;
+  padding: 14px;
+  max-height: 420px;
+  overflow: auto;
+  background: #0f1f2e;
+  color: #d6e3ef;
+  border: 1px solid #1d425a;
+  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre;
+  tab-size: 2;
+}

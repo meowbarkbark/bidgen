@@ -5,9 +5,9 @@ import { DetailScreen } from './screens/DetailScreen';
 import { ProgressScreen } from './screens/ProgressScreen';
 import { RecognitionScreen } from './screens/RecognitionScreen';
 import { UploadScreen } from './screens/UploadScreen';
-import type { FileMeta, ProcurementType, RecognitionSummary, ResultFilters } from './types';
+import type { FileMeta, ProcurementType, RecognitionSummary, ResultFilters, WorkbookIR } from './types';
 import { filterResults, getAdjacentResult, sortResultsByPriority } from './utils/results';
-import { classifySheet, type ExcelInfo } from './utils/excel';
+import { irSheetToRecognition } from './utils/excel';
 
 type Step = 'upload' | 'recognition' | 'progress' | 'dashboard' | 'detail';
 
@@ -31,7 +31,7 @@ export default function App({ initialStep = 'upload' }: AppProps) {
   const [step, setStep] = useState<Step>(initialStep);
   const [procurementType, setProcurementType] = useState<ProcurementType>('CONSTRUCTION');
   const [excelFile, setExcelFile] = useState<FileMeta | null>(initialStep === 'upload' ? null : fallbackExcel);
-  const [excelInfo, setExcelInfo] = useState<ExcelInfo | null>(null);
+  const [workbookIR, setWorkbookIR] = useState<WorkbookIR | null>(null);
   const [pdfFiles, setPdfFiles] = useState<FileMeta[]>(initialStep === 'upload' ? [] : fallbackPdfs);
   const [selectedResultId, setSelectedResultId] = useState('vr-001');
   const [filters, setFilters] = useState<ResultFilters>({
@@ -45,19 +45,20 @@ export default function App({ initialStep = 'upload' }: AppProps) {
   const selectedResult = orderedResults.find((result) => result.resultId === selectedResultId) ?? visibleResults[0] ?? orderedResults[0];
 
   const summary = useMemo<RecognitionSummary>(() => {
-    if (!excelInfo || excelInfo.sheetNames.length === 0) return recognitionSummary;
-    return { ...recognitionSummary, sheets: excelInfo.sheetNames.map(classifySheet) };
-  }, [excelInfo]);
+    if (!workbookIR || workbookIR.sheets.length === 0) return recognitionSummary;
+    return { ...recognitionSummary, sheets: workbookIR.sheets.map(irSheetToRecognition) };
+  }, [workbookIR]);
 
   const steps = useMemo(() => {
-    if (!excelInfo) return progressSteps;
-    const structureDetail = `${excelInfo.sheetCount}개 시트, ${excelInfo.formulaCount.toLocaleString()}개 수식, ${excelInfo.mergeCount.toLocaleString()}개 병합범위`;
+    if (!workbookIR) return progressSteps;
+    const { sheetCount, formulaCount, mergeCount } = workbookIR.totals;
+    const structureDetail = `${sheetCount}개 시트, ${formulaCount.toLocaleString()}개 수식, ${mergeCount.toLocaleString()}개 병합범위`;
     return progressSteps.map((s) => (s.label === 'Excel 시트 및 셀 구조 분석' ? { ...s, detail: structureDetail } : s));
-  }, [excelInfo]);
+  }, [workbookIR]);
 
-  function handleExcelChange(meta: FileMeta, info: ExcelInfo | null) {
+  function handleExcelChange(meta: FileMeta, ir: WorkbookIR | null) {
     setExcelFile(meta);
-    setExcelInfo(info);
+    setWorkbookIR(ir);
   }
 
   function applyFilters(nextFilters: ResultFilters) {
@@ -90,6 +91,7 @@ export default function App({ initialStep = 'upload' }: AppProps) {
         onRun={() => setStep('progress')}
         pdfFiles={pdfFiles}
         summary={summary}
+        workbookIR={workbookIR}
       />
     );
   }

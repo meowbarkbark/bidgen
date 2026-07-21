@@ -1,16 +1,21 @@
-import { ArrowLeft, ArrowRight, CheckCircle2, TriangleAlert } from '../components/icons';
-import type { FileMeta, RecognitionSummary } from '../types';
+import { useState } from 'react';
+import { ArrowLeft, ArrowRight, CheckCircle2, FileSearch, FileText, TriangleAlert } from '../components/icons';
+import type { FileMeta, RecognitionSummary, WorkbookIR } from '../types';
 import { Button, Panel } from '../components/ui';
+import { downloadJson } from '../utils/download';
 
 interface RecognitionScreenProps {
   excelFile: FileMeta | null;
   pdfFiles: FileMeta[];
   summary: RecognitionSummary;
+  workbookIR: WorkbookIR | null;
   onBack: () => void;
   onRun: () => void;
 }
 
-export function RecognitionScreen({ excelFile, pdfFiles, summary, onBack, onRun }: RecognitionScreenProps) {
+export function RecognitionScreen({ excelFile, pdfFiles, summary, workbookIR, onBack, onRun }: RecognitionScreenProps) {
+  const [showJson, setShowJson] = useState(false);
+
   return (
     <main className="app-shell">
       <aside className="workflow-rail">
@@ -51,6 +56,31 @@ export function RecognitionScreen({ excelFile, pdfFiles, summary, onBack, onRun 
             ))}
           </div>
         </Panel>
+
+        {workbookIR ? (
+          <Panel>
+            <div className="section-heading">
+              <span>구조 JSON (Workbook IR)</span>
+              <p>
+                양식과 무관한 고정 스키마 v{workbookIR.schemaVersion} · 시트 {workbookIR.totals.sheetCount}개 · 셀{' '}
+                {workbookIR.totals.cellCount.toLocaleString()}개 · 수식 {workbookIR.totals.formulaCount.toLocaleString()}개 · 병합{' '}
+                {workbookIR.totals.mergeCount.toLocaleString()}개
+              </p>
+            </div>
+            <div className="json-actions">
+              <Button icon={<FileSearch size={16} />} onClick={() => setShowJson((v) => !v)}>
+                {showJson ? '구조 JSON 닫기' : '구조 JSON 보기'}
+              </Button>
+              <Button
+                icon={<FileText size={16} />}
+                onClick={() => downloadJson(`${workbookIR.fileName.replace(/\.[^.]+$/, '')}.ir.json`, workbookIR)}
+              >
+                JSON 다운로드
+              </Button>
+            </div>
+            {showJson ? <pre className="json-view">{JSON.stringify(workbookIR, null, 2)}</pre> : null}
+          </Panel>
+        ) : null}
 
         <Panel>
           <div className="section-heading">
