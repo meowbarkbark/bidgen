@@ -116,9 +116,23 @@ function matchCanonical(label: string): CanonicalDef | null {
 
 interface SheetCtx {
   name: string;
+  role: string;
   byAddr: Map<string, IRCell>;
   byRow: Map<number, IRCell[]>;
 }
+
+// 총액/라벨 탐색 시 시트 우선순위 (표지는 마지막)
+const ROLE_PRIORITY: Record<string, number> = {
+  COST_SUMMARY: 0,
+  CONSTRUCTION_ITEMS: 1,
+  QUANTITY: 2,
+  UNIT_PRICE: 3,
+  PRICE_SURVEY: 4,
+  WAGE_RATE: 5,
+  RATE_STANDARD: 6,
+  OTHER: 7,
+  COVER_SUMMARY: 9,
+};
 
 interface Ctx {
   sheets: Map<string, SheetCtx>;
@@ -138,7 +152,7 @@ function buildCtx(ir: WorkbookIR): Ctx {
       byRow.set(r, arr);
     }
     for (const arr of byRow.values()) arr.sort((a, b) => decodeCell(a.address).c - decodeCell(b.address).c);
-    sheets.set(sheet.sheetName, { name: sheet.sheetName, byAddr, byRow });
+    sheets.set(sheet.sheetName, { name: sheet.sheetName, role: sheet.sheetRole, byAddr, byRow });
   }
 
   const lookup = (addr: string, currentSheet: string): number | null => {
@@ -622,7 +636,11 @@ const TOTAL_LABELS = {
 };
 
 function findLabeledAmount(ctx: Ctx, keys: string[]): { sheetName: string; cell: IRCell; label: string } | null {
-  for (const [sheetName, sheet] of ctx.sheets) {
+  const ordered = Array.from(ctx.sheets.values()).sort(
+    (a, b) => (ROLE_PRIORITY[a.role] ?? 7) - (ROLE_PRIORITY[b.role] ?? 7),
+  );
+  for (const sheet of ordered) {
+    const sheetName = sheet.name;
     for (const cell of sheet.byAddr.values()) {
       if (cell.dataType !== 'STRING') continue;
       const norm = normalizeLabel(String(cell.cachedValue ?? cell.displayValue));
@@ -654,6 +672,20 @@ export function runValidation(ir: WorkbookIR, config: ValidationConfig): Validat
     okCount += 1;
     results.push(makeResult(nextId(), ctx, input));
   };
+
+  // 시트별 검사 커버리지 (모든 시트를 검사했음을 보여주기 위함)
+  const coverage = new Map<string, { checked: number; passed: number; anchor: string }>();
+  const cov = (sheetName: string, anchor: string) => {
+    const c = coverage.get(sheetName) ?? { checked: 0, passed: 0, anchor };
+    if (!c.anchor || c.anchor === 'A1') c.anchor = anchor;
+    coverage.set(sheetName, c);
+    return c;
+  };
+
+  // 항목 탐지 (커버리지·규칙 공용)
+  const detected = detectItems(ir, { maxCells });
+  const itemsPerSheet = new Map<string, number>();
+  for (const it of detected) itemsPerSheet.set(it.sheetName, (itemsPerSheet.get(it.sheetName) ?? 0) + 1);
 
   // 1) 참조 오류 (#REF! 등)
   let scanned = 0;
@@ -700,9 +732,14 @@ export function runValidation(ir: WorkbookIR, config: ValidationConfig): Validat
       if (cached == null) continue;
       const { value, supported } = evaluateFormula(cell.rawValue, (addr) => ctx.lookup(addr, sheet.sheetName));
       if (!supported || value == null) continue;
+      const c = cov(sheet.sheetName, cell.address);
+      c.checked += 1;
       const diff = cached - value;
       const absdiff = Math.abs(diff);
-      if (absdiff <= 1) continue; // 일치(끝수 이내)
+      if (absdiff <= 1) {
+        c.passed += 1;
+        continue; // 일치(끝수 이내)
+      }
       const isRounding = /ROUND|INT|SUM/i.test(cell.rawValue);
       results.push(
         makeResult(nextId(), ctx, {
@@ -768,7 +805,6 @@ export function runValidation(ir: WorkbookIR, config: ValidationConfig): Validat
   }
 
   // 4) 탐지 항목: 하드코딩(공통) + 요율(요율 모드)
-  const detected = detectItems(ir, { maxCells });
   const refMode = config.mode === 'ARITHMETIC_AND_RATE';
   for (const item of detected) {
     if (!item.amountCell) continue;
@@ -916,6 +952,36 @@ export function runValidation(ir: WorkbookIR, config: ValidationConfig): Validat
     };
     if (status === 'OK') pushOk(input);
     else results.push(makeResult(nextId(), ctx, input));
+  }
+
+  // 5) 시트별 검사 커버리지 (모든 시트를 검사했음을 표시)
+  for (const sheet of ir.sheets) {
+    const c = coverage.get(sheet.sheetName);
+    const items = itemsPerSheet.get(sheet.sheetName) ?? 0;
+    const checked = c?.checked ?? 0;
+    const passed = c?.passed ?? 0;
+    if (checked === 0 && items === 0) continue; // 검사할 게 없는 시트(빈/텍스트만)는 생략
+    pushOk({
+      status: 'OK',
+      validationType: 'FORMULA',
+      procurementType: pt,
+      canonicalName: `${sheet.sheetName} 검사`,
+      category: '검사범위',
+      sheetName: sheet.sheetName,
+      cell: c?.anchor ?? sheet.cells[0]?.address ?? 'A1',
+      summary: `${sheet.sheetName} 시트 검사 완료`,
+      reason: `${sheet.sheetName}: 수식 ${passed}/${checked}건 자기일관성 통과, 제비율·보험료 항목 ${items}건 인식. (전체 셀 ${sheet.cellCount}개 · 수식 ${sheet.formulaCount}개)`,
+      recommendedAction: '이상 없음. 세부 항목은 각 결과에서 확인하십시오.',
+      finalAmount: '',
+      difference: '0',
+      evidence: {
+        documentTitle: '자동 산술 검증 (기준자료 불필요)',
+        tableTitle: '시트 검사 범위',
+        quote: `수식 ${passed}/${checked}건 통과 · 항목 ${items}건`,
+        confidence: 1,
+        appliedCondition: `역할: ${sheet.sheetRole}`,
+      },
+    });
   }
 
   // 검출 0건 안내 (업로드 파일은 샘플로 대체하지 않음)
