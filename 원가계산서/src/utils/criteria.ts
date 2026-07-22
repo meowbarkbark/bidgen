@@ -15,6 +15,12 @@ function decodeCell(addr: string): { c: number; r: number } {
   return { c: decodeCol(m[1]), r: parseInt(m[2], 10) - 1 };
 }
 
+function mergedEndCol(cell: IRCell): number | null {
+  if (!cell.mergedRange) return null;
+  const [, end] = cell.mergedRange.split(':');
+  return end ? decodeCell(end).c : null;
+}
+
 function groupByRow(cells: IRCell[]): Map<number, IRCell[]> {
   const byRow = new Map<number, IRCell[]>();
   for (const cell of cells) {
@@ -112,13 +118,16 @@ function buildRateCriteriaMatrix(ir: WorkbookIR): RateCriterion[] {
 
     // 헤더 행 탐지: 산출기초식(…×율) 셀이 2개 이상인 행
     let headerRow = -1;
-    const headerCells: Array<{ col: number; item: string; confidence: number }> = [];
+    const headerCells: Array<{ col: number; endCol: number; item: string; confidence: number }> = [];
     for (const r of rowIdxs) {
-      const matches: Array<{ col: number; item: string; confidence: number }> = [];
+      const matches: Array<{ col: number; endCol: number; item: string; confidence: number }> = [];
       for (const cell of byRow.get(r)!) {
         if (cell.dataType !== 'STRING') continue;
         const m = matchBasis(String(cell.cachedValue ?? cell.displayValue));
-        if (m) matches.push({ col: decodeCell(cell.address).c, ...m });
+        if (m) {
+          const col = decodeCell(cell.address).c;
+          matches.push({ col, endCol: mergedEndCol(cell) ?? col, ...m });
+        }
       }
       if (matches.length >= 2) {
         headerRow = r;
@@ -129,10 +138,12 @@ function buildRateCriteriaMatrix(ir: WorkbookIR): RateCriterion[] {
     if (headerRow < 0) continue;
 
     // 헤더 그룹의 열 범위(현재 헤더 ~ 다음 헤더 직전) 계산 — 값이 헤더 열이 아닌 하위 열에 있는 경우 대비
-    const sortedCols = [...new Set(headerCells.map((h) => h.col))].sort((a, b) => a - b);
-    const spanEnd = (col: number) => {
-      const next = sortedCols.find((c) => c > col);
-      return next != null ? Math.min(next - 1, col + 10) : col + 10;
+    const sortedHeaders = [...headerCells].sort((a, b) => a.col - b.col);
+    const spanEnd = (header: { col: number; endCol: number }) => {
+      const next = sortedHeaders.find((candidate) => candidate.col > header.col);
+      const nextLimit = next ? next.col - 1 : null;
+      if (header.endCol > header.col) return nextLimit == null ? header.endCol : Math.min(header.endCol, nextLimit);
+      return nextLimit != null ? Math.min(nextLimit, header.col + 10) : header.col + 10;
     };
 
     // 각 헤더 그룹에서 첫 숫자 셀(왼→오, 위→아래) = 최소 구간 요율
@@ -140,7 +151,7 @@ function buildRateCriteriaMatrix(ir: WorkbookIR): RateCriterion[] {
       if (seen.has(h.item)) continue;
       let rateCell: IRCell | null = null;
       let dataRow = -1;
-      const end = spanEnd(h.col);
+      const end = spanEnd(h);
       let rateColIdx = h.col;
       // 요율 후보: 0<값<100 (기초액 등 큰 숫자는 요율이 아니므로 제외)
       outer: for (let col = h.col; col <= end; col += 1) {
