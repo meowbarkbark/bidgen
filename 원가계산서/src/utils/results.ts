@@ -1,4 +1,27 @@
-import type { ResultFilters, ValidationResult, ValidationStatus } from '../types';
+import type { ReferenceFiles, ResultFilters, ValidationResult, ValidationStatus } from '../types';
+
+// 입력된 기준자료 파일 개수 (제비율/노임단가/표준품셈 중 채워진 슬롯)
+export function countReferenceFiles(rf: ReferenceFiles): number {
+  return [rf.rateFile, rf.laborFile, rf.standardPdf].filter(Boolean).length;
+}
+
+type Evidence = ValidationResult['evidence'];
+
+// 판단근거 위치 한 줄 표기 (PRD §13.1): 기준자료 Excel은 시트!셀·표시값, 표준품셈은 페이지
+export function evidenceLocation(evidence: Evidence): string {
+  if (
+    (evidence.documentType === 'RATE_EXCEL' || evidence.documentType === 'LABOR_RATE_EXCEL') &&
+    evidence.sheetName &&
+    evidence.cell
+  ) {
+    const loc = `${evidence.sheetName}!${evidence.cell}`;
+    return evidence.displayValue ? `${loc} · ${evidence.displayValue}` : loc;
+  }
+  if (evidence.documentType === 'STANDARD_PDF' && evidence.page != null) {
+    return `${evidence.documentTitle} · ${evidence.page}페이지`;
+  }
+  return evidence.documentTitle;
+}
 
 export const statusLabels: Record<ValidationStatus, string> = {
   ERROR: '오류',

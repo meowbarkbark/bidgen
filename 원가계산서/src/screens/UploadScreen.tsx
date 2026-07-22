@@ -1,7 +1,8 @@
 import { FileSpreadsheet, FileText, Play, ShieldCheck } from '../components/icons';
-import type { FileMeta, ProcurementType } from '../types';
+import type { FileMeta, LaborRate, ProcurementType, RateCriterion, ReferenceFiles } from '../types';
 import { Button, Panel, UploadPanel } from '../components/ui';
 import { buildWorkbookIR } from '../utils/excel';
+import { parseLaborWorkbook, parseRateWorkbook } from '../utils/criteria';
 import type { WorkbookIR } from '../types';
 
 const procurementOptions: Array<{ value: ProcurementType; label: string; description: string }> = [
@@ -13,10 +14,12 @@ const procurementOptions: Array<{ value: ProcurementType; label: string; descrip
 interface UploadScreenProps {
   procurementType: ProcurementType;
   excelFile: FileMeta | null;
-  pdfFiles: FileMeta[];
+  referenceFiles: ReferenceFiles;
   onProcurementTypeChange: (type: ProcurementType) => void;
   onExcelChange: (file: FileMeta, ir: WorkbookIR | null) => void;
-  onPdfChange: (files: FileMeta[]) => void;
+  onRateExcel: (meta: FileMeta, criteria: RateCriterion[]) => void;
+  onLaborExcel: (meta: FileMeta, rates: LaborRate[]) => void;
+  onStandardPdf: (meta: FileMeta) => void;
   onStart: () => void;
 }
 
@@ -31,10 +34,12 @@ function fileToMeta(file: File, detail: string): FileMeta {
 export function UploadScreen({
   procurementType,
   excelFile,
-  pdfFiles,
+  referenceFiles,
   onProcurementTypeChange,
   onExcelChange,
-  onPdfChange,
+  onRateExcel,
+  onLaborExcel,
+  onStandardPdf,
   onStart,
 }: UploadScreenProps) {
   return (
@@ -109,32 +114,87 @@ export function UploadScreen({
 
           <Panel>
             <UploadPanel
-              accept=".pdf,.xlsx,.xls"
-              action="PDF·Excel 파일 추가"
-              description="제비율표, 노임단가표, 표준품셈 등 기준자료(PDF·Excel)를 등록하세요."
-              label="PDF·Excel 파일 추가"
-              multiple
-              onChange={(event) => {
-                const files = Array.from(event.currentTarget.files ?? []);
-                onPdfChange(
-                  files.map((file) =>
-                    fileToMeta(
-                      file,
-                      /\.xlsx?$/i.test(file.name) ? '시트 파싱 가능 · 시연 메타데이터' : '텍스트 추출 가능 · 시연 메타데이터',
-                    ),
-                  ),
-                );
+              accept=".xlsx,.xls"
+              action="제비율 Excel 선택"
+              description="제비율 적용기준 Excel(.xlsx)을 등록하세요. 요율·산출기초 근거로 사용됩니다."
+              label="제비율 Excel 선택"
+              onChange={async (event) => {
+                const file = event.currentTarget.files?.[0];
+                if (!file) return;
+                try {
+                  const { criteria } = await parseRateWorkbook(file, procurementType);
+                  onRateExcel(fileToMeta(file, `제비율 ${criteria.length}개 추출 · 셀 근거 포함`), criteria);
+                } catch {
+                  onRateExcel(fileToMeta(file, '요율 추출 실패 · 수기 입력 필요'), []);
+                }
               }}
-              title="계산기준자료"
+              title={
+                <>
+                  제비율 기준 Excel <em className="req-tag">필수</em>
+                </>
+              }
               meta={
-                pdfFiles.length > 0 ? (
-                  <ul className="file-list">
-                    {pdfFiles.map((file) => (
-                      <li key={file.name}>
-                        {/\.xlsx?$/i.test(file.name) ? <FileSpreadsheet size={16} /> : <FileText size={16} />} {file.name}
-                      </li>
-                    ))}
-                  </ul>
+                referenceFiles.rateFile ? (
+                  <span>
+                    <FileSpreadsheet size={16} /> {referenceFiles.rateFile.name} · {referenceFiles.rateFile.detail}
+                  </span>
+                ) : null
+              }
+            />
+          </Panel>
+
+          <Panel>
+            <UploadPanel
+              accept=".xlsx,.xls"
+              action="노임단가 Excel 선택"
+              description="노임단가표 Excel(.xlsx)을 등록하세요. 직종별 단가 비교에 사용됩니다."
+              label="노임단가 Excel 선택"
+              onChange={async (event) => {
+                const file = event.currentTarget.files?.[0];
+                if (!file) return;
+                try {
+                  const { laborRates } = await parseLaborWorkbook(file, procurementType);
+                  onLaborExcel(fileToMeta(file, `직종 ${laborRates.length}개 추출 · 셀 근거 포함`), laborRates);
+                } catch {
+                  onLaborExcel(fileToMeta(file, '단가 추출 실패'), []);
+                }
+              }}
+              title={
+                <>
+                  노임단가 기준 Excel <em className="req-tag">필수</em>
+                </>
+              }
+              meta={
+                referenceFiles.laborFile ? (
+                  <span>
+                    <FileSpreadsheet size={16} /> {referenceFiles.laborFile.name} · {referenceFiles.laborFile.detail}
+                  </span>
+                ) : null
+              }
+            />
+          </Panel>
+
+          <Panel>
+            <UploadPanel
+              accept=".pdf"
+              action="표준품셈 PDF 선택"
+              description="표준품셈·가격산정지침 PDF(.pdf)는 선택 입력입니다. 없으면 표준품셈 검증은 미수행됩니다."
+              label="표준품셈 PDF 선택"
+              onChange={(event) => {
+                const file = event.currentTarget.files?.[0];
+                if (!file) return;
+                onStandardPdf(fileToMeta(file, '표준품셈 · 페이지 근거 (선택)'));
+              }}
+              title={
+                <>
+                  표준품셈 PDF <em className="opt-tag">선택</em>
+                </>
+              }
+              meta={
+                referenceFiles.standardPdf ? (
+                  <span>
+                    <FileText size={16} /> {referenceFiles.standardPdf.name} · {referenceFiles.standardPdf.detail}
+                  </span>
                 ) : null
               }
             />
@@ -142,7 +202,7 @@ export function UploadScreen({
         </div>
 
         <div className="footer-actions">
-          <p>기준자료가 없어도 산술·수식·합계 검증은 진행할 수 있습니다.</p>
+          <p>제비율·노임단가 Excel이 없어도 산술·수식·합계 검증은 진행할 수 있습니다.</p>
           <Button disabled={!excelFile} icon={<Play size={16} />} onClick={onStart} variant="primary">
             자동검증 시작
           </Button>

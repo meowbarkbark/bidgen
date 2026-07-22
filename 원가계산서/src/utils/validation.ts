@@ -1,8 +1,11 @@
 import type {
   DetectedItem,
+  EvidenceDocType,
   IRCell,
+  NormalizedCostRow,
   ProcurementType,
   ReferenceRate,
+  ResolutionStatus,
   RoundingMethod,
   ValidationConfig,
   ValidationResult,
@@ -89,6 +92,8 @@ const CANONICAL_ITEMS: CanonicalDef[] = [
   { canonical: '국민건강보험료', category: '제보험료', aliases: ['국민건강보험료', '건강보험료'], requiresReference: true },
   { canonical: '노인장기요양보험료', category: '제보험료', aliases: ['노인장기요양보험료', '장기요양보험료'], requiresReference: true },
   { canonical: '산업안전보건관리비', category: '제경비', aliases: ['산업안전보건관리비', '안전보건관리비'], requiresReference: true },
+  { canonical: '간접노무비', category: '노무비', aliases: ['간접노무비'], requiresReference: true },
+  { canonical: '기타경비', category: '제경비', aliases: ['기타경비'], requiresReference: true },
   { canonical: '일반관리비', category: '일반관리비', aliases: ['일반관리비'], requiresReference: true },
   { canonical: '이윤', category: '이윤', aliases: ['이윤'], requiresReference: true },
   { canonical: '환경보전비', category: '제경비', aliases: ['환경보전비'], requiresReference: true },
@@ -108,6 +113,11 @@ function matchCanonical(label: string): CanonicalDef | null {
     if (norm.includes(alias)) return def;
   }
   return null;
+}
+
+/** 라벨을 표준 원가항목명으로 매핑합니다. 매칭 실패 시 null. (기준자료 파서에서 재사용) */
+export function matchCanonicalLabel(label: string): string | null {
+  return matchCanonical(label)?.canonical ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -182,8 +192,8 @@ type Token = { type: 'num' | 'ref' | 'range' | 'fn' | 'op' | 'lparen' | 'rparen'
 class Unsupported extends Error {}
 
 const REF_RE = /^(?:(?:'[^']+'|[A-Za-z0-9_가-힣]+)!)?\$?[A-Z]{1,3}\$?\d+(?::\$?[A-Z]{1,3}\$?\d+)?/;
-const FN_RE = /^(SUM|ROUND|ROUNDDOWN|INT)\s*(?=\()/i;
-const NUM_RE = /^\d+(?:\.\d+)?/;
+const FN_RE = /^(SUM|ROUNDDOWN|ROUNDUP|ROUND|TRUNC|INT|MAX|MIN)\s*(?=\()/i;
+const NUM_RE = /^\d+(?:\.\d+)?%?/; // 후행 % 리터럴 허용 (예: 3.11%)
 
 function tokenize(src: string): Token[] {
   const tokens: Token[] = [];
@@ -264,19 +274,19 @@ export function evaluateFormula(
   const peek = () => tokens[pos];
   const next = () => tokens[pos++];
 
-  function expandRange(rangeToken: string): number {
+  function expandRangeValues(rangeToken: string): number[] {
     const [a, b] = rangeToken.split(':');
     const start = decodeCell(a.replace(/.*!/, '').replace(/\$/g, ''));
     const end = decodeCell(b.replace(/.*!/, '').replace(/\$/g, ''));
     const sheetPrefix = rangeToken.includes('!') ? rangeToken.slice(0, rangeToken.indexOf('!') + 1) : '';
-    let sum = 0;
+    const out: number[] = [];
     for (let r = Math.min(start.r, end.r); r <= Math.max(start.r, end.r); r += 1) {
       for (let c = Math.min(start.c, end.c); c <= Math.max(start.c, end.c); c += 1) {
         const v = lookup(`${sheetPrefix}${encodeCol(c)}${r + 1}`);
-        if (v != null) sum += v;
+        if (v != null) out.push(v);
       }
     }
-    return sum;
+    return out;
   }
 
   function parseExpr(depth: number): number | null {
@@ -326,7 +336,7 @@ export function evaluateFormula(
     }
     if (t.type === 'num') {
       next();
-      return Number(t.value);
+      return t.value.endsWith('%') ? Number(t.value.slice(0, -1)) / 100 : Number(t.value);
     }
     if (t.type === 'ref') {
       next();
@@ -343,24 +353,28 @@ export function evaluateFormula(
   function parseFunc(depth: number): number | null {
     const fn = next().value;
     if (!peek() || next().type !== 'lparen') throw new Unsupported();
-    const args: Array<number | null> = [];
-    if (fn === 'SUM') {
-      let total = 0;
-      // SUM 인자: range 또는 expr, 콤마 구분
+
+    // 가변인자 집계: SUM / MAX / MIN (range 또는 expr, 콤마 구분)
+    if (fn === 'SUM' || fn === 'MAX' || fn === 'MIN') {
+      const vals: number[] = [];
       do {
         const t = peek();
         if (t && t.type === 'range') {
           next();
-          total += expandRange(t.value);
+          for (const v of expandRangeValues(t.value)) vals.push(v);
         } else {
           const v = parseExpr(depth + 1);
-          if (v != null) total += v;
+          if (v != null) vals.push(v);
         }
       } while (peek() && peek().type === 'comma' && next());
       if (!peek() || next().type !== 'rparen') throw new Unsupported();
-      return total;
+      if (fn === 'SUM') return vals.reduce((a, b) => a + b, 0);
+      if (vals.length === 0) return null;
+      return fn === 'MAX' ? Math.max(...vals) : Math.min(...vals);
     }
-    // ROUND / ROUNDDOWN / INT
+
+    // 고정인자: ROUND / ROUNDDOWN / ROUNDUP / TRUNC / INT
+    const args: Array<number | null> = [];
     while (true) {
       const v = parseExpr(depth + 1);
       args.push(v);
@@ -377,9 +391,13 @@ export function evaluateFormula(
     const n = args[1] ?? 0;
     if (x == null || n == null) return null;
     if (fn === 'ROUND') return roundHalfAway(x, n);
-    if (fn === 'ROUNDDOWN') {
+    if (fn === 'ROUNDDOWN' || fn === 'TRUNC') {
       const f = Math.pow(10, n);
       return Math.trunc(x * f) / f;
+    }
+    if (fn === 'ROUNDUP') {
+      const f = Math.pow(10, n);
+      return (Math.sign(x) * Math.ceil(Math.abs(x) * f)) / f;
     }
     throw new Unsupported();
   }
@@ -399,12 +417,15 @@ export function evaluateFormula(
 // ---------------------------------------------------------------------------
 
 export function detectItems(ir: WorkbookIR, opts?: { maxCells?: number }): DetectedItem[] {
-  const maxCells = opts?.maxCells ?? 20000;
+  const maxCells = opts?.maxCells ?? 200000;
   const items: DetectedItem[] = [];
   const seen = new Set<string>();
   let scanned = 0;
 
   for (const sheet of ir.sheets) {
+    // 기준자료성 시트(제비율표·노임단가표)는 검증 대상 원가항목이 아니므로 탐지 제외
+    if (sheet.sheetRole === 'RATE_STANDARD' || sheet.sheetRole === 'WAGE_RATE') continue;
+
     const byRow = new Map<number, IRCell[]>();
     for (const cell of sheet.cells) {
       const { r } = decodeCell(cell.address);
@@ -423,9 +444,10 @@ export function detectItems(ir: WorkbookIR, opts?: { maxCells?: number }): Detec
       const { r, c: labelCol } = decodeCell(cell.address);
       const rowCells = (byRow.get(r) ?? []).filter((rc) => decodeCell(rc.address).c > labelCol);
 
-      // 금액 셀: 라벨 오른쪽에서 숫자값을 가진 가장 오른쪽 셀
-      let amountCell: IRCell | null = null;
+      // 요율 셀: 라벨 오른쪽 첫 %서식/0<x<1 셀. 금액 셀: 요율 외 숫자 셀 중 수식 셀 우선, 없으면 가장 오른쪽
       let rateCell: IRCell | null = null;
+      let amountFormula: IRCell | null = null;
+      let amountAny: IRCell | null = null;
       for (const rc of rowCells) {
         const num = parseKoreanNumber(rc.cachedValue);
         if (num == null) continue;
@@ -434,9 +456,11 @@ export function detectItems(ir: WorkbookIR, opts?: { maxCells?: number }): Detec
         if (looksRate && asRate != null) {
           if (!rateCell) rateCell = rc;
         } else {
-          amountCell = rc; // 오른쪽으로 갈수록 갱신 → 최종 = 가장 오른쪽
+          amountAny = rc; // 오른쪽으로 갈수록 갱신 → 최종 = 가장 오른쪽 숫자
+          if (rc.dataType === 'FORMULA') amountFormula = rc; // 수식 금액 셀 우선
         }
       }
+      const amountCell = amountFormula ?? amountAny; // 금액은 계산 수식 셀을 우선 채택
       if (!amountCell) continue; // 금액 없는 라벨-only 매칭 제외
 
       const key = `${sheet.sheetName}!${amountCell.address}`;
@@ -469,6 +493,97 @@ export function buildReferenceRows(ir: WorkbookIR): ReferenceRate[] {
     byName.set(item.canonicalName, { canonicalName: item.canonicalName, rate: def?.defaultRate ?? null });
   }
   return Array.from(byName.values());
+}
+
+// ---------------------------------------------------------------------------
+// 정규화 원가계산서 (PRD §9.1: Workbook IR → 검증 대상 항목으로 정규화)
+// detectItems(항목 인식)을 표준 컬럼으로 투영한다. 검증은 동일 항목을 대상으로 수행되고,
+// 결과화면 표는 이 정규화 행에 검증 상태를 주석으로 입힌다(annotateRows). → 검증과 표가 같은 정규화 산출물을 공유.
+// ---------------------------------------------------------------------------
+
+function classifyCategory(category: string): { section: string; nature: string; policy: string } {
+  switch (category) {
+    case '제보험료':
+      return { section: '경비', nature: '제비율성 경비', policy: 'RATE_CHECK' };
+    case '제경비':
+      return { section: '경비', nature: '제비율성 경비', policy: 'RATE_CHECK' };
+    case '노무비':
+      return { section: '노무비', nature: '노임성 직접비', policy: 'RATE_CHECK' };
+    case '일반관리비':
+      return { section: '일반관리비', nature: '일반관리비', policy: 'RATE_CHECK' };
+    case '이윤':
+      return { section: '이윤', nature: '이윤', policy: 'RATE_CHECK' };
+    case '부가세':
+      return { section: '집계', nature: '집계', policy: 'INTERNAL_CONSISTENCY' };
+    default:
+      return { section: '기타', nature: '기타', policy: 'MANUAL_REVIEW' };
+  }
+}
+
+// 수식 안에 숨은 상수(보정값·절사단위) 추출 — 셀참조/함수명 제거 후 남는 숫자
+function extractFormulaConstants(formula: string | undefined): string {
+  if (!formula) return '';
+  const stripped = formula
+    .replace(/[A-Za-z가-힣_']+!/g, '')
+    .replace(/\b\$?[A-Z]{1,3}\$?\d+(?::\$?[A-Z]{1,3}\$?\d+)?\b/g, '')
+    .replace(/\b(SUM|ROUND|ROUNDDOWN|ROUNDUP|TRUNC|INT|MAX|MIN)\b/gi, '');
+  const nums = stripped.match(/\d+(?:\.\d+)?%?/g);
+  return nums ? nums.join(', ') : '';
+}
+
+export function normalizeCostStatement(ir: WorkbookIR): NormalizedCostRow[] {
+  const ctx = buildCtx(ir);
+  const items = detectItems(ir).filter(
+    (item): item is DetectedItem & { amountCell: string } => item.amountCell != null,
+  );
+  return items.map((item) => {
+    const amountObj = ctx.sheets.get(item.sheetName)?.byAddr.get(item.amountCell);
+    const isFormula = amountObj?.dataType === 'FORMULA';
+
+    // 산출기초 추적: 금액 수식의 참조 중 요율 셀을 제외한 최대 금액값
+    let baseValue: number | null = null;
+    const baseCells: string[] = [];
+    if (amountObj?.dataType === 'FORMULA') {
+      for (const ref of amountObj.references) {
+        const rr = ref.replace(/\$/g, '');
+        if (item.rateCell && rr === item.rateCell) continue;
+        baseCells.push(rr);
+        const v = ctx.lookup(ref, item.sheetName);
+        if (v != null && (baseValue == null || v > baseValue)) baseValue = v;
+      }
+    }
+
+    const cls = classifyCategory(item.category);
+    const resolution: ResolutionStatus = !isFormula
+      ? 'UNRESOLVED'
+      : amountObj!.rawValue.includes('!') || baseCells.some((c) => c.includes('!'))
+        ? 'CROSS_SHEET_TRACE'
+        : baseCells.length > 0
+          ? 'FORMULA_TRACE'
+          : 'FORMULA_UNRESOLVED';
+
+    return {
+      rowId: `${item.sheetName}!${item.amountCell}`,
+      status: 'OK',
+      sourceSection: cls.section,
+      costNature: cls.nature,
+      validationPolicy: cls.policy,
+      canonicalName: item.canonicalName,
+      originalName: item.originalLabel,
+      baseLabel: item.canonicalName === '부가가치세' ? '공급가액' : '산출기초',
+      baseAmount: fmt(baseValue),
+      rate: item.rateValue != null ? `${(item.rateValue * 100).toFixed(3)}%` : '',
+      rateSource: item.rateCell ? `${item.sheetName}!${item.rateCell}` : '',
+      amount: fmt(item.amountValue),
+      calculatedAmount: '',
+      difference: '',
+      calculationCell: `${item.sheetName}!${item.amountCell}`,
+      resolutionStatus: resolution,
+      formulaConstants: extractFormulaConstants(amountObj?.rawValue),
+      tracePath: baseCells.join(' → '),
+      note: '',
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -545,6 +660,10 @@ interface ResultInput {
   recommendedAction?: string;
   evidence: {
     documentTitle: string;
+    documentType?: EvidenceDocType;
+    sheetName?: string;
+    cell?: string;
+    displayValue?: string;
     tableTitle: string;
     quote: string;
     confidence: number;
@@ -588,7 +707,11 @@ function makeResult(id: string, ctx: Ctx, input: ResultInput): ValidationResult 
     reason: input.reason,
     evidence: {
       documentTitle: input.evidence.documentTitle,
-      page: input.evidence.page ?? 0,
+      documentType: input.evidence.documentType ?? 'BUILTIN',
+      sheetName: input.evidence.sheetName,
+      cell: input.evidence.cell,
+      displayValue: input.evidence.displayValue,
+      page: input.evidence.page,
       tableTitle: input.evidence.tableTitle,
       quote: input.evidence.quote,
       confidence: input.evidence.confidence,
@@ -662,7 +785,7 @@ export function runValidation(ir: WorkbookIR, config: ValidationConfig): Validat
   const results: ValidationResult[] = [];
   const pt = ir.procurementType;
   const defaultRounding = config.defaultRounding ?? 'ROUND_WON';
-  const maxCells = config.maxCellsScanned ?? 20000;
+  const maxCells = config.maxCellsScanned ?? 200000;
   let seq = 0;
   const nextId = () => `vr-${String(++seq).padStart(3, '0')}`;
   let okCount = 0;
@@ -740,7 +863,7 @@ export function runValidation(ir: WorkbookIR, config: ValidationConfig): Validat
         c.passed += 1;
         continue; // 일치(끝수 이내)
       }
-      const isRounding = /ROUND|INT|SUM/i.test(cell.rawValue);
+      const isRounding = /ROUND|ROUNDUP|ROUNDDOWN|TRUNC|INT|SUM|MAX|MIN/i.test(cell.rawValue);
       results.push(
         makeResult(nextId(), ctx, {
           status: absdiff < 10 ? 'NEEDS_REVIEW' : 'ERROR',
@@ -806,6 +929,32 @@ export function runValidation(ir: WorkbookIR, config: ValidationConfig): Validat
 
   // 4) 탐지 항목: 하드코딩(공통) + 요율(요율 모드)
   const refMode = config.mode === 'ARITHMETIC_AND_RATE';
+
+  // 요율 근거 evidence: 제비율 Excel에서 파싱된 경우 셀 근거, 아니면 사용자 입력
+  const rateEvidence = (ref: ReferenceRate, canonicalName: string): ResultInput['evidence'] => {
+    const pct = ref.rate != null ? `${(ref.rate * 100).toFixed(3)}%` : '';
+    if (ref.source) {
+      return {
+        documentTitle: ref.source.documentTitle,
+        documentType: 'RATE_EXCEL',
+        sheetName: ref.source.sheetName,
+        cell: ref.source.cell,
+        displayValue: ref.source.displayValue,
+        tableTitle: '제비율 적용기준',
+        quote: `${canonicalName} 기준요율 ${ref.source.displayValue} (출처 ${ref.source.sheetName}!${ref.source.cell})`,
+        confidence: 0.95,
+        appliedCondition: '기준자료 Excel에서 추출',
+      };
+    }
+    return {
+      documentTitle: '사용자 입력 기준요율',
+      documentType: 'BUILTIN',
+      tableTitle: '제비율/보험료 요율 (수기 입력)',
+      quote: `${canonicalName} 기준요율 ${pct} (사용자 입력)`,
+      confidence: 0.99,
+      appliedCondition: '사용자 수기 입력 · 기준일 미지정',
+    };
+  };
   for (const item of detected) {
     if (!item.amountCell) continue;
     const amountCellObj = ctx.sheets.get(item.sheetName)?.byAddr.get(item.amountCell);
@@ -903,13 +1052,7 @@ export function runValidation(ir: WorkbookIR, config: ValidationConfig): Validat
             ? `${item.canonicalName} 적용요율 ${(applied * 100).toFixed(3)}% vs 기준요율 ${(ref.rate * 100).toFixed(3)}%.`
             : `${item.canonicalName} 산출기초·적용요율 셀을 특정하지 못했습니다.`,
         recommendedAction: status === 'ERROR' ? '적용요율을 기준요율에 맞게 수정하십시오.' : '이상 없습니다.',
-        evidence: {
-          documentTitle: '사용자 입력 기준요율',
-          tableTitle: '제비율/보험료 요율 (수기 입력)',
-          quote: `${item.canonicalName} 기준요율 ${(ref.rate * 100).toFixed(3)}% (사용자 입력)`,
-          confidence: 0.99,
-          appliedCondition: '사용자 수기 입력 · 기준일 미지정',
-        },
+        evidence: rateEvidence(ref, item.canonicalName),
       };
       if (status === 'OK') pushOk(input);
       else results.push(makeResult(nextId(), ctx, input));
@@ -942,16 +1085,84 @@ export function runValidation(ir: WorkbookIR, config: ValidationConfig): Validat
         rounding === 'FLOOR_WON' ? '절사' : '반올림'
       }), Excel 금액 ${fmt(amount)} (차이 ${fmt(diff)}).`,
       recommendedAction: status === 'OK' ? '이상 없습니다.' : '적용요율과 산출금액을 기준요율에 맞게 수정하십시오.',
-      evidence: {
-        documentTitle: '사용자 입력 기준요율',
-        tableTitle: '제비율/보험료 요율 (수기 입력)',
-        quote: `${item.canonicalName} 기준요율 ${(ref.rate * 100).toFixed(3)}% 적용 시 기대금액 ${fmt(expected)}`,
-        confidence: 0.99,
-        appliedCondition: '사용자 수기 입력 · 기준일 미지정',
-      },
+      evidence: rateEvidence(ref, item.canonicalName),
     };
     if (status === 'OK') pushOk(input);
     else results.push(makeResult(nextId(), ctx, input));
+  }
+
+  // 4b) 노임단가 연계 검증 (V-CON-007) — 노임단가 Excel이 파싱된 경우
+  if (config.laborRates && config.laborRates.length > 0) {
+    const laborByName = new Map(config.laborRates.map((l) => [normalizeLabel(l.occupationName), l]));
+    const laborDoc = config.laborDocumentTitle ?? '노임단가.xlsx';
+    const seenLabor = new Set<string>();
+    let laborChecked = 0;
+    for (const sheet of ir.sheets) {
+      if (laborChecked > 300) break;
+      const sctx = ctx.sheets.get(sheet.sheetName);
+      if (!sctx) continue;
+      for (const cell of sheet.cells) {
+        if (laborChecked > 300) break;
+        if (cell.dataType !== 'STRING') continue;
+        const name = normalizeLabel(String(cell.cachedValue ?? cell.displayValue));
+        const lr = laborByName.get(name);
+        if (!lr) continue;
+
+        const { r, c } = decodeCell(cell.address);
+        const rowCells = (sctx.byRow.get(r) ?? []).filter((rc) => decodeCell(rc.address).c > c);
+        let appliedCell: IRCell | null = null;
+        for (const rc of rowCells) {
+          const num = parseKoreanNumber(rc.cachedValue);
+          if (num != null && num >= 1000) {
+            appliedCell = rc; // 직종명 오른쪽 첫 단가성 숫자
+            break;
+          }
+        }
+        if (!appliedCell) continue;
+        const applied = parseKoreanNumber(appliedCell.cachedValue);
+        if (applied == null) continue;
+
+        const key = `${sheet.sheetName}!${appliedCell.address}`;
+        if (seenLabor.has(key)) continue;
+        seenLabor.add(key);
+        laborChecked += 1;
+
+        const diff = applied - lr.unitPrice;
+        const status: ValidationStatus = Math.abs(diff) <= 1 ? 'OK' : 'ERROR';
+        const input: ResultInput = {
+          status,
+          validationType: 'LABOR',
+          procurementType: pt,
+          canonicalName: `${lr.occupationName} 노임단가`,
+          originalName: lr.occupationName,
+          category: '노무비',
+          sheetName: sheet.sheetName,
+          cell: appliedCell.address,
+          inputValue: fmt(applied),
+          baseAmount: '1',
+          rawAmount: fmt(lr.unitPrice),
+          finalAmount: fmt(lr.unitPrice),
+          roundingMethod: '단가 직접 비교',
+          difference: fmt(diff),
+          summary: status === 'OK' ? '노임단가가 기준과 일치합니다.' : '노임단가가 기준 노임단가표와 다릅니다.',
+          reason: `${lr.occupationName} 적용단가 ${fmt(applied)}원 vs 노임단가표 기준 ${fmt(lr.unitPrice)}원 (차이 ${fmt(diff)}원).`,
+          recommendedAction: status === 'OK' ? '이상 없습니다.' : '적용 노임단가를 노임단가표 기준으로 수정하십시오.',
+          evidence: {
+            documentTitle: laborDoc,
+            documentType: 'LABOR_RATE_EXCEL',
+            sheetName: lr.sheetName,
+            cell: lr.cell,
+            displayValue: lr.displayValue,
+            tableTitle: '직종별 노임단가',
+            quote: `${lr.occupationName} ${lr.displayValue}원 (출처 ${lr.sheetName}!${lr.cell})`,
+            confidence: lr.confidence,
+            appliedCondition: '노임단가 Excel에서 추출',
+          },
+        };
+        if (status === 'OK') pushOk(input);
+        else results.push(makeResult(nextId(), ctx, input));
+      }
+    }
   }
 
   // 5) 시트별 검사 커버리지 (모든 시트를 검사했음을 표시)

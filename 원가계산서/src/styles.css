@@ -207,7 +207,29 @@ button {
 }
 
 .upload-grid {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.req-tag,
+.opt-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  border-radius: 999px;
+  vertical-align: middle;
+}
+
+.req-tag {
+  color: #c8413a;
+  background: #fbeae9;
+}
+
+.opt-tag {
+  color: #617080;
+  background: #eef2f5;
 }
 
 .upload-panel {
@@ -339,6 +361,15 @@ button {
   font-weight: 800;
 }
 
+.criterion.is-skipped {
+  background: #f2f4f6;
+  border-style: dashed;
+}
+
+.criterion.is-skipped span {
+  color: #8a97a4;
+}
+
 .review-note,
 .recommendation {
   display: flex;
@@ -438,7 +469,7 @@ button {
 }
 
 .summary-grid {
-  grid-template-columns: 1.1fr repeat(4, minmax(130px, 1fr));
+  grid-template-columns: 1.1fr repeat(5, minmax(110px, 1fr));
 }
 
 .summary-card {
@@ -476,6 +507,10 @@ button {
 
 .summary-ok {
   border-left-color: #2a8a5d;
+}
+
+.summary-neutral {
+  border-left-color: #9aa9b7;
 }
 
 .dashboard-grid {
@@ -951,4 +986,127 @@ blockquote {
 .rate-input em {
   font-style: normal;
   color: #617080;
+}
+
+.rate-source {
+  display: block;
+  margin-top: 3px;
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 600;
+  color: #2a8a5d;
+}
+
+/* 핵심 확인사항 (PRD §6.3) */
+.key-findings ol {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: finding;
+}
+
+.key-findings li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #f7fafc;
+  border: 1px solid #dbe3ea;
+  border-radius: 8px;
+}
+
+.key-findings li button {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.key-findings li button strong {
+  font-size: 14px;
+}
+
+.key-findings li button span {
+  color: #617080;
+  font-size: 13px;
+}
+
+.key-findings li small {
+  color: #8a97a4;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 정규화 원가계산서 리포트 (PRD §6.4 / FR-034) */
+.normalized-report {
+  margin-top: 14px;
+}
+
+.normalized-table-scroll {
+  margin-top: 10px;
+  overflow-x: auto;
+  border: 1px solid #dbe3ea;
+  border-radius: 8px;
+}
+
+.normalized-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.normalized-table th,
+.normalized-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid #eef2f5;
+}
+
+.normalized-table thead th {
+  position: sticky;
+  top: 0;
+  background: #f2f6f9;
+  color: #40515f;
+  font-weight: 700;
+  z-index: 1;
+}
+
+.normalized-table td.num,
+.normalized-table th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.normalized-table td.diff {
+  color: #c8413a;
+  font-weight: 700;
+}
+
+.normalized-table code {
+  font-size: 11px;
+  color: #40515f;
+  background: #eef2f5;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.normalized-table tbody tr {
+  cursor: pointer;
+}
+
+.normalized-table tbody tr:hover {
+  background: #f7fafc;
+}
+
+.normalized-table tbody tr.is-selected {
+  background: #e9f3fb;
+  box-shadow: inset 3px 0 0 #1d5f8f;
 }

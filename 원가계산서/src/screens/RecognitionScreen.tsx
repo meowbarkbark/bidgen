@@ -1,17 +1,30 @@
 import { useState } from 'react';
 import { ArrowLeft, ArrowRight, CheckCircle2, FileSearch, FileText, TriangleAlert } from '../components/icons';
-import type { FileMeta, RecognitionSummary, ReferenceRate, ValidationMode, WorkbookIR } from '../types';
+import type {
+  FileMeta,
+  LaborRate,
+  RateCriterion,
+  RecognitionCriterion,
+  RecognitionSummary,
+  ReferenceFiles,
+  ReferenceRate,
+  ValidationMode,
+  WorkbookIR,
+} from '../types';
 import { Button, Panel } from '../components/ui';
+import { countReferenceFiles } from '../utils/results';
 import { downloadJson } from '../utils/download';
 
 interface RecognitionScreenProps {
   excelFile: FileMeta | null;
-  pdfFiles: FileMeta[];
+  referenceFiles: ReferenceFiles;
   summary: RecognitionSummary;
   workbookIR: WorkbookIR | null;
   mode: ValidationMode;
   onModeChange: (mode: ValidationMode) => void;
   referenceRows: ReferenceRate[];
+  rateCriteria: RateCriterion[];
+  laborRates: LaborRate[];
   rateInputs: Record<string, string>;
   onRateInput: (canonicalName: string, value: string) => void;
   onBack: () => void;
@@ -25,18 +38,63 @@ const MODE_OPTIONS: Array<{ value: ValidationMode; label: string; description: s
 
 export function RecognitionScreen({
   excelFile,
-  pdfFiles,
+  referenceFiles,
   summary,
   workbookIR,
   mode,
   onModeChange,
   referenceRows,
+  rateCriteria,
+  laborRates,
   rateInputs,
   onRateInput,
   onBack,
   onRun,
 }: RecognitionScreenProps) {
   const [showJson, setShowJson] = useState(false);
+
+  // 파싱된 요율을 canonicalName으로 조회 (요율 입력란 셀 근거 힌트용)
+  const criterionByName = new Map(rateCriteria.map((c) => [c.canonicalName, c]));
+
+  // 실제 업로드 파일이 있으면 파싱 결과로, 없으면(딥링크 데모) 정적 요약으로 기준자료 인식 카드 구성
+  const criteria: RecognitionCriterion[] = workbookIR
+    ? [
+        {
+          title: '제비율 기준 Excel',
+          count: rateCriteria.length,
+          status: rateCriteria.length > 0 ? '추출 완료' : '미수행',
+          description:
+            rateCriteria.length > 0
+              ? rateCriteria
+                  .slice(0, 3)
+                  .map((c) => `${c.canonicalName} ${c.displayValue} ← ${c.sheetName}!${c.cell}`)
+                  .join(', ')
+              : '제비율 Excel 미업로드 · 요율검증은 수기 입력으로 진행',
+        },
+        {
+          title: '노임단가 Excel',
+          count: laborRates.length,
+          status: laborRates.length > 0 ? '추출 완료' : '미수행',
+          description:
+            laborRates.length > 0
+              ? `${laborRates.slice(0, 4).map((l) => l.occupationName).join(', ')} 등 직종별 단가`
+              : '노임단가 Excel 미업로드',
+        },
+        {
+          title: '표준품셈 PDF',
+          count: 0,
+          status: referenceFiles.standardPdf ? '확인 필요' : '미수행',
+          description: referenceFiles.standardPdf
+            ? '선택 입력 · 대표항목 페이지 근거 (2일 시연형 제한)'
+            : '표준품셈 PDF 미업로드 (선택 항목)',
+        },
+      ]
+    : summary.criteria.map((criterion) => {
+        if (criterion.title.includes('표준품셈') && !referenceFiles.standardPdf) {
+          return { ...criterion, status: '미수행', description: '표준품셈 PDF가 입력되지 않아 미수행입니다. (선택 항목)' };
+        }
+        return criterion;
+      });
 
   return (
     <main className="app-shell">
@@ -49,7 +107,7 @@ export function RecognitionScreen({
         <header className="topbar">
           <div>
             <h1>문서 인식 결과</h1>
-            <p>{excelFile?.name ?? '원가계산서'} · 기준자료 {pdfFiles.length || 3}개</p>
+            <p>{excelFile?.name ?? '원가계산서'} · 기준자료 {countReferenceFiles(referenceFiles) || 3}개</p>
           </div>
         </header>
 
@@ -128,26 +186,39 @@ export function RecognitionScreen({
           <Panel>
             <div className="section-heading">
               <span>기준요율 입력</span>
-              <p>파일에서 탐지한 제비율·보험료 항목입니다. 기준요율(%)을 입력하면 적용요율·금액을 검증합니다.</p>
+              <p>
+                제비율 Excel에서 파싱된 요율(셀 근거 표시)은 비워두면 자동 적용됩니다. 값을 입력하면 수기 요율로 대체합니다.
+              </p>
             </div>
             {workbookIR && referenceRows.length > 0 ? (
               <div className="rate-table">
-                {referenceRows.map((row) => (
-                  <label className="rate-row" key={row.canonicalName}>
-                    <span>{row.canonicalName}</span>
-                    <span className="rate-input">
-                      <input
-                        aria-label={`${row.canonicalName} 기준요율(%)`}
-                        inputMode="decimal"
-                        onChange={(event) => onRateInput(row.canonicalName, event.target.value)}
-                        placeholder={row.rate != null ? (row.rate * 100).toString() : '예: 3.56'}
-                        type="text"
-                        value={rateInputs[row.canonicalName] ?? (row.rate != null ? (row.rate * 100).toString() : '')}
-                      />
-                      <em>%</em>
-                    </span>
-                  </label>
-                ))}
+                {referenceRows.map((row) => {
+                  const parsed = criterionByName.get(row.canonicalName);
+                  const fallback = row.rate != null ? (row.rate * 100).toString() : '예: 3.56';
+                  return (
+                    <label className="rate-row" key={row.canonicalName}>
+                      <span>
+                        {row.canonicalName}
+                        {parsed ? (
+                          <em className="rate-source">
+                            제비율 Excel {parsed.sheetName}!{parsed.cell} · {parsed.displayValue} (파싱됨)
+                          </em>
+                        ) : null}
+                      </span>
+                      <span className="rate-input">
+                        <input
+                          aria-label={`${row.canonicalName} 기준요율(%)`}
+                          inputMode="decimal"
+                          onChange={(event) => onRateInput(row.canonicalName, event.target.value)}
+                          placeholder={parsed ? (parsed.rate * 100).toString() : fallback}
+                          type="text"
+                          value={rateInputs[row.canonicalName] ?? ''}
+                        />
+                        <em>%</em>
+                      </span>
+                    </label>
+                  );
+                })}
               </div>
             ) : (
               <div className="review-note">
@@ -164,10 +235,10 @@ export function RecognitionScreen({
             <p>추출된 기준 종류와 확인 필요 항목입니다.</p>
           </div>
           <div className="criteria-grid">
-            {summary.criteria.map((criterion) => (
-              <div className="criterion" key={criterion.title}>
+            {criteria.map((criterion) => (
+              <div className={`criterion ${criterion.status === '미수행' ? 'is-skipped' : ''}`} key={criterion.title}>
                 <strong>{criterion.title}</strong>
-                <span>{criterion.count}개 기준</span>
+                <span>{criterion.status === '미수행' ? '미수행' : `${criterion.count}개 기준`}</span>
                 <p>{criterion.description}</p>
               </div>
             ))}

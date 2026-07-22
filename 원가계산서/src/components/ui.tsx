@@ -41,9 +41,9 @@ export function SummaryCard({
   );
 }
 
-interface UploadPanelProps extends InputHTMLAttributes<HTMLInputElement> {
+interface UploadPanelProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'title'> {
   label: string;
-  title: string;
+  title: ReactNode;
   description: string;
   action: string;
   meta?: ReactNode;

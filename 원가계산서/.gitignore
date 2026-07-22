@@ -1,5 +1,15 @@
+.vercel/
 node_modules/
 dist/
 .cache/
 .pnpm-store/
+.agents/
+.claude/
+.docx_qa/
+outputs/
 *.log
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db

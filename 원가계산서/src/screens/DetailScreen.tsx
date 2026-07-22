@@ -66,21 +66,45 @@ export function DetailScreen({ result, onBack, onNavigate }: DetailScreenProps) 
           <Panel>
             <div className="panel-heading-row">
               <h2>기준자료 판단근거</h2>
-              <FileText size={18} />
+              {result.evidence.documentType === 'STANDARD_PDF' ? <FileText size={18} /> : <FileSpreadsheet size={18} />}
             </div>
             <dl className="detail-list">
               <div>
                 <dt>기준 문서</dt>
                 <dd>{result.evidence.documentTitle}</dd>
               </div>
-              <div>
-                <dt>페이지</dt>
-                <dd>{result.evidence.page}페이지</dd>
-              </div>
-              <div>
-                <dt>표 또는 조항</dt>
-                <dd>{result.evidence.tableTitle}</dd>
-              </div>
+              {result.evidence.documentType === 'RATE_EXCEL' || result.evidence.documentType === 'LABOR_RATE_EXCEL' ? (
+                <>
+                  <div>
+                    <dt>시트</dt>
+                    <dd>{result.evidence.sheetName ?? '-'}</dd>
+                  </div>
+                  <div>
+                    <dt>셀 주소</dt>
+                    <dd>{result.evidence.cell ?? '-'}</dd>
+                  </div>
+                  <div>
+                    <dt>기준 표시값</dt>
+                    <dd>{result.evidence.displayValue ?? '-'}</dd>
+                  </div>
+                </>
+              ) : result.evidence.documentType === 'STANDARD_PDF' ? (
+                <>
+                  <div>
+                    <dt>페이지</dt>
+                    <dd>{result.evidence.page != null ? `${result.evidence.page}페이지` : '-'}</dd>
+                  </div>
+                  <div>
+                    <dt>표 또는 조항</dt>
+                    <dd>{result.evidence.tableTitle}</dd>
+                  </div>
+                </>
+              ) : (
+                <div>
+                  <dt>근거 유형</dt>
+                  <dd>{result.evidence.tableTitle}</dd>
+                </div>
+              )}
               <div>
                 <dt>적용 대상</dt>
                 <dd>{result.evidence.appliedCondition}</dd>

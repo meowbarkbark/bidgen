@@ -19,6 +19,16 @@ export interface FileMeta {
   detail: string;
 }
 
+// 기준자료 입력 (PRD §8.1): 제비율·노임단가는 Excel 필수, 표준품셈은 PDF 선택
+export interface ReferenceFiles {
+  rateFile: FileMeta | null; // 제비율 Excel (.xlsx) 필수
+  laborFile: FileMeta | null; // 노임단가 Excel (.xlsx) 필수
+  standardPdf: FileMeta | null; // 표준품셈 PDF (.pdf) 선택
+}
+
+// 판단근거 문서 유형 (PRD §13.1)
+export type EvidenceDocType = 'RATE_EXCEL' | 'LABOR_RATE_EXCEL' | 'STANDARD_PDF' | 'BUILTIN';
+
 export interface ValidationResult {
   resultId: string;
   status: ValidationStatus;
@@ -52,13 +62,51 @@ export interface ValidationResult {
   reason: string;
   evidence: {
     documentTitle: string;
-    page: number;
+    documentType: EvidenceDocType;
+    // 기준자료 Excel 근거 (제비율/노임단가)
+    sheetName?: string;
+    cell?: string;
+    displayValue?: string;
+    // 선택 표준품셈 PDF 근거
+    page?: number;
     tableTitle: string;
     quote: string;
     confidence: number;
     appliedCondition: string;
   };
   recommendedAction: string;
+}
+
+// --- 정규화 원가계산서 리포트 (PRD §6.4 / FR-034) ---
+
+export type ResolutionStatus =
+  | 'SAME_ROW'
+  | 'FORMULA_TRACE'
+  | 'CROSS_SHEET_TRACE'
+  | 'CROSS_SHEET_UNRESOLVED'
+  | 'FORMULA_UNRESOLVED'
+  | 'UNRESOLVED';
+
+export interface NormalizedCostRow {
+  rowId: string;
+  status: ValidationStatus;
+  sourceSection: string; // 원본구간
+  costNature: string; // 비용성격
+  validationPolicy: string; // 검증정책 (RATE_CHECK 등)
+  canonicalName: string; // 표준항목
+  originalName: string; // 원본항목
+  baseLabel: string; // 산출기초명
+  baseAmount: string; // 산출기초값
+  rate: string; // 요율
+  rateSource: string; // 요율출처
+  amount: string; // 금액
+  calculatedAmount: string; // 계산값
+  difference: string; // 차이
+  calculationCell: string; // 계산셀
+  resolutionStatus: ResolutionStatus; // 해결상태
+  formulaConstants: string; // 수식상수
+  tracePath: string; // 추적경로
+  note: string; // 비고
 }
 
 export interface RecognitionSheet {
@@ -71,7 +119,7 @@ export interface RecognitionSheet {
 export interface RecognitionCriterion {
   title: string;
   count: number;
-  status: '추출 완료' | '확인 필요' | '검증 불가';
+  status: '추출 완료' | '확인 필요' | '검증 불가' | '미수행';
   description: string;
 }
 
@@ -139,15 +187,47 @@ export type ValidationMode = 'ARITHMETIC_ONLY' | 'ARITHMETIC_AND_RATE';
 
 export type RoundingMethod = 'ROUND_WON' | 'FLOOR_WON' | 'FLOOR_TEN' | 'NONE';
 
+// 기준자료 Excel에서 추출한 요율의 출처 (셀 근거)
+export interface RateSource {
+  documentTitle: string; // 파일명
+  sheetName: string;
+  cell: string;
+  displayValue: string;
+}
+
 export interface ReferenceRate {
   canonicalName: string;
   rate: number | null; // 분수(0.032). null = 미입력
   roundingMethod?: RoundingMethod;
+  source?: RateSource; // 제비율 Excel에서 파싱한 경우의 셀 근거
+}
+
+// 제비율 Excel에서 파싱한 기준요율 (PRD §8.5 RATE_EXCEL)
+export interface RateCriterion {
+  canonicalName: string;
+  rate: number; // 분수(0.0356)
+  sheetName: string;
+  cell: string;
+  displayValue: string;
+  confidence: number;
+  condition?: string; // 간접공사비 매트릭스의 적용 구간(직접공사비)·기간 조건
+}
+
+// 노임단가 Excel에서 파싱한 직종별 단가 (PRD §8.5 LABOR_RATE_EXCEL)
+export interface LaborRate {
+  occupationName: string;
+  unitPrice: number;
+  sheetName: string;
+  cell: string;
+  displayValue: string;
+  confidence: number;
 }
 
 export interface ValidationConfig {
   mode: ValidationMode;
   referenceRates: Record<string, ReferenceRate>; // canonicalName 키
+  laborRates?: LaborRate[]; // 노임단가 Excel 파싱 결과 (V-CON-007)
+  laborDocumentTitle?: string; // 노임단가 파일명 (근거 표기용)
   maxCellsScanned?: number; // 기본 20000
   defaultRounding?: RoundingMethod; // 기본 ROUND_WON
 }
