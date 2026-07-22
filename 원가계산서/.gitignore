@@ -4,6 +4,7 @@ dist/
 .cache/
 .pnpm-store/
 .agents/
+.worktrees/
 .claude/
 .docx_qa/
 outputs/
